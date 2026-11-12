@@ -30,6 +30,8 @@ import {
   appPresenceFromProbeError,
   isPlatformVersionUnavailable,
 } from "../../apple/errors";
+import { subscribeAppFacts } from "../../apple/appFacts";
+import { ensureAppFacts } from "../../apple/ensureAppFacts";
 import { getErrorMessage } from "../../utils/error";
 import { dateComesFromPackage } from "../../utils/versionMetadataSource";
 import { countryCodeMap, storeIdToCountry } from "../../apple/config";
@@ -132,6 +134,7 @@ export default function SearchPage() {
     search,
     setSearchParam,
     dropResult,
+    enrichResult,
   } = useSearch();
 
   useEffect(() => {
@@ -175,6 +178,18 @@ export default function SearchPage() {
       sameProbeState(probes[id], state) ? probes : { ...probes, [id]: state },
     );
   }
+
+  // Display facts can land from any exchange after the cards painted: refresh
+  // the cards' gaps the moment the session learns them, without another search.
+  useEffect(
+    () =>
+      subscribeAppFacts(() => {
+        for (const app of useSearch.getState().results) {
+          enrichResult(app.id);
+        }
+      }),
+    [enrichResult],
+  );
 
   // Fetches the version list on resolve so 选择版本 opens from the cache; for a
   // record with no evidence for this platform the exchange alone decides
@@ -242,6 +257,13 @@ export default function SearchPage() {
         // platform: fill it once so package metadata (or a newer candidate)
         // can settle the card.
         if (entry?.displayVersion && !isUnplatformedClientSeed(entry)) {
+          // The metadata is complete, so no exchange will run for this card:
+          // name it with one metadata-only exchange instead. When every
+          // version came from the shared cache, this is the only thing that
+          // ever learns the app's name and icon.
+          const current =
+            useSearch.getState().results.find((r) => r.id === app.id) ?? app;
+          await ensureAppFacts(account, current, selected);
           return;
         }
         if (seen.has(selected)) return;
@@ -335,6 +357,9 @@ export default function SearchPage() {
           }
           settleProbe(fetchable.id, { status: "resolved" });
         }
+        // The exchange reply may have named the app: fill the card's gaps so
+        // it reads as the app, not the id.
+        enrichResult(fetchable.id);
         // Fill the build the card will actually label. The newest build can be
         // another platform's; versionForPlatform skips it from cached metadata.
         // If the first fill discovers a different platform, re-evaluate once
@@ -383,6 +408,7 @@ export default function SearchPage() {
     accountsLoading,
     listVersionsWithLicense,
     dropResult,
+    enrichResult,
     ensureLoaded,
     fillVersionsSilently,
     t,

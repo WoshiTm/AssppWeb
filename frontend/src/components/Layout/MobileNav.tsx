@@ -17,41 +17,44 @@ const navItems = [
   { to: '/settings', label: 'settings', icon: SettingsIcon },
 ];
 
+/**
+ * Floating pill dock: a detached rounded bar hovering above the home
+ * indicator, icon-only (the accessible name carries the label). The bar sits
+ * clear of the safe area; the page container's bottom padding accounts for
+ * its height plus this offset, and toasts stack above it.
+ */
 export default function MobileNav() {
   const { t } = useTranslation();
   const activeDownloadCount = useActiveDownloadCount();
 
   return (
-    <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200/70 bg-gray-50/84 shadow-[0_-8px_28px_rgba(28,28,30,0.045)] backdrop-blur-2xl backdrop-saturate-150 transition-colors duration-200 dark:border-gray-800/80 dark:bg-gray-950/84 dark:shadow-[0_-8px_28px_rgba(0,0,0,0.22)] md:hidden">
-      <div className="flex h-[3.625rem] items-stretch justify-around">
+    <nav className="pointer-events-none fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-50 md:hidden">
+      <div className="pointer-events-auto mx-auto flex h-14 max-w-md items-center justify-around rounded-full border border-gray-200/70 bg-gray-50/85 px-2 shadow-[0_12px_32px_rgba(28,28,30,0.14)] backdrop-blur-2xl backdrop-saturate-150 transition-colors duration-200 dark:border-gray-800/80 dark:bg-gray-950/85 dark:shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/'}
+            aria-label={t(`nav.${item.label}`)}
+            title={t(`nav.${item.label}`)}
             className={({ isActive }) =>
-              `flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-1.5 text-[10px] font-medium leading-none transition-colors ${
+              `relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
                 isActive
-                  ? 'text-blue-600 dark:text-blue-400'
+                  ? 'bg-blue-600/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               }`
             }
           >
-            <span className="relative">
-              <item.icon className="h-[22px] w-[22px] shrink-0" />
-              {item.to === '/downloads' && activeDownloadCount > 0 && (
-                <span
-                  aria-hidden="true"
-                  data-testid="downloads-tab-badge"
-                  className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-none text-white"
-                >
-                  {activeDownloadCount}
-                </span>
-              )}
-            </span>
-            <span className="max-w-full truncate px-1">
-              {t(`nav.${item.label}`)}
-            </span>
+            <item.icon className="h-6 w-6 shrink-0" />
+            {item.to === '/downloads' && activeDownloadCount > 0 && (
+              <span
+                aria-hidden="true"
+                data-testid="downloads-tab-badge"
+                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-none text-white"
+              >
+                {activeDownloadCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </div>

@@ -7,6 +7,10 @@ import ProductDetail from '../../src/components/Search/ProductDetail';
 import { getVersionMetadata } from '../../src/apple/versionLookup';
 import { getDownloadInfo } from '../../src/apple/download';
 import {
+  clearCachedAppFacts,
+  recordAppFacts,
+} from '../../src/apple/appFacts';
+import {
   fetchPackageVersionMetadata,
   fetchVersionMetadata,
 } from '../../src/api/versionMetadata';
@@ -2435,5 +2439,78 @@ describe('ProductDetail download action', () => {
         screen.getByRole('combobox', { name: 'search.product.account' }),
       ).toHaveTextContent(cnAccount.email),
     );
+  });
+});
+
+describe('ProductDetail facts fill', () => {
+  beforeEach(() => {
+    clearCachedAppFacts();
+    mocks.accounts = [account];
+    mocks.accountsLoading = false;
+    mocks.startDownload.mockReset();
+    mocks.acquireLicense.mockReset();
+    mocks.toastDownloadError.mockReset();
+    mocks.toastLicenseError.mockReset();
+    mocks.lookupApp.mockReset();
+    mocks.lookupApp.mockResolvedValue(null);
+    mocks.listVersions.mockReset();
+    mocks.listVersions.mockResolvedValue({
+      versions: ['883341013'],
+      updatedCookies: [],
+    });
+    vi.mocked(getVersionMetadata).mockReset();
+    vi.mocked(getVersionMetadata).mockImplementation(async (_account, app) => {
+      recordAppFacts(app.id, {
+        name: '小推',
+        artworkUrl: 'https://example.com/icon.png',
+        artistName: 'Example Studio',
+        bundleID: 'com.example.xiaotui',
+      });
+      return {
+        metadata: {
+          displayVersion: '1.1.6',
+          releaseDate: '2026-03-13T08:44:16.000Z',
+        },
+        updatedCookies: [],
+      } as never;
+    });
+    vi.mocked(fetchVersionMetadata).mockReset();
+    vi.mocked(fetchVersionMetadata).mockResolvedValue({});
+    vi.mocked(getDownloadInfo).mockReset();
+    vi.mocked(getDownloadInfo).mockRejectedValue(new Error('not used'));
+    vi.mocked(fetchPackageVersionMetadata).mockReset();
+    vi.mocked(fetchPackageVersionMetadata).mockResolvedValue(undefined);
+    useSettingsStore.setState({ autoFetchVersionInfo: true });
+    useSettingsStore.setState({ autoAcquireLicense: false });
+    // The shared cache already vouches for the only version, so the silent
+    // fill has nothing to ask: without a facts exchange of its own, no
+    // exchange would ever name this record.
+    useVersionMetadataStore.setState({
+      entries: {
+        '883341013': {
+          displayVersion: '1.1.6',
+          releaseDate: '2026-03-13T08:44:16.000Z',
+          minimumOsVersion: '13.0',
+          supportedPlatforms: ['iPhoneOS'],
+          source: 'package-read',
+        },
+      },
+      attempted: {},
+    });
+    useVersionListsStore.setState({ lists: {} });
+    useDownloadsStore.setState({ tasks: [] });
+    useToastStore.setState({ toasts: [] });
+  });
+
+  it('names a bare record whose versions all came from the shared cache', async () => {
+    const { container } = renderProductDetailDirect('6503940942');
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('img[src="https://example.com/icon.png"]'),
+      ).not.toBeNull(),
+    );
+    expect(screen.getAllByText('小推').length).toBeGreaterThan(0);
+    expect(vi.mocked(getVersionMetadata)).toHaveBeenCalledTimes(1);
   });
 });

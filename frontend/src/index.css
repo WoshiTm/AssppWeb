@@ -65,6 +65,33 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* True-fullscreen sizing: in standalone (Home Screen) mode the shell and the
+ * login gate take the large viewport; in a browser tab the dynamic viewport.
+ * html/body stay unclipped so the initial containing block is the full window.
+ * The document itself never scrolls — the shell fixes the height and the page
+ * container scrolls inside it — so no scroll-lock trick is needed here. */
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+
+html[data-standalone="true"] .app-shell {
+  height: 100lvh;
+}
+
+html[data-standalone="true"] body {
+  min-height: 100lvh;
+}
+
+.gate-backdrop {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+html[data-standalone="true"] .gate-backdrop {
+  min-height: 100lvh;
+}
+
 html.dark,
 html.dark body {
   color: white;

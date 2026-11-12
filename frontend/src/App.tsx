@@ -88,7 +88,7 @@ export default function App() {
 
   return (
     <PasswordGate>
-      <div className="flex h-screen h-[100dvh] overflow-hidden bg-gray-50 text-gray-900 selection:bg-blue-200 dark:bg-gray-950 dark:text-gray-100 dark:selection:bg-blue-800">
+      <div className="app-shell flex overflow-hidden bg-gray-50 text-gray-900 selection:bg-blue-200 dark:bg-gray-950 dark:text-gray-100 dark:selection:bg-blue-800">
         <ToastContainer />
         <GlobalDownloadNotifier />
         <AnisetteWarmup />

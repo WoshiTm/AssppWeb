@@ -24,7 +24,7 @@ export default function PageContainer({
   }, [location.pathname, clearSearch]);
 
   return (
-    <div className="ios-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-gray-50 pb-[calc(6rem+env(safe-area-inset-bottom))] [scrollbar-gutter:stable] transition-colors duration-200 dark:bg-gray-950 md:pb-10">
+    <div className="ios-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-gray-50 pb-[calc(5rem+env(safe-area-inset-bottom))] [scrollbar-gutter:stable] transition-colors duration-200 dark:bg-gray-950 md:pb-10">
       <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
         {(title || action) && (
           <div className="mb-6 flex flex-wrap items-start justify-between gap-x-5 gap-y-3 sm:mb-7">

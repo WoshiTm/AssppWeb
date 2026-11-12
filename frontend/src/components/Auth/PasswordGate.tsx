@@ -2,10 +2,14 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Spinner from '../common/Spinner';
 
-const SESSION_KEY = 'auth-token';
+/** The access token lives in localStorage, not sessionStorage: closing the tab
+ * — or iOS reclaiming the web app in the background — must not sign the user
+ * out. The value is the password's SHA-256 hash, the same credential the
+ * session used to hold, and a stale one falls back to the form below. */
+const STORAGE_KEY = 'auth-token';
 
 export function getAccessToken(): string | null {
-  return sessionStorage.getItem(SESSION_KEY);
+  return localStorage.getItem(STORAGE_KEY);
 }
 
 async function hashPassword(password: string): Promise<string> {
@@ -29,12 +33,12 @@ export default function PasswordGate({ children }: { children: ReactNode }) {
       .then((r) => r.json())
       .then(async (data: { required: boolean }) => {
         if (!data.required) {
-          sessionStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem(STORAGE_KEY);
           setStatus('verified');
           return;
         }
 
-        const storedToken = sessionStorage.getItem(SESSION_KEY);
+        const storedToken = localStorage.getItem(STORAGE_KEY);
         if (storedToken) {
           // Validate stored token — it may be stale after a password change
           try {
@@ -51,7 +55,7 @@ export default function PasswordGate({ children }: { children: ReactNode }) {
           } catch {
             // Validation failed — fall through to show password form
           }
-          sessionStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem(STORAGE_KEY);
         }
 
         setStatus('required');
@@ -77,7 +81,7 @@ export default function PasswordGate({ children }: { children: ReactNode }) {
       const data = (await res.json()) as { ok: boolean };
 
       if (data.ok) {
-        sessionStorage.setItem(SESSION_KEY, hash);
+        localStorage.setItem(STORAGE_KEY, hash);
         setStatus('verified');
       } else {
         setError(t('auth.error'));
@@ -169,7 +173,7 @@ export default function PasswordGate({ children }: { children: ReactNode }) {
 
 function GateBackdrop({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-gray-100 px-4 py-10 dark:bg-gray-950">
+    <div className="gate-backdrop relative flex items-center justify-center overflow-hidden bg-gray-100 px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))] dark:bg-gray-950">
       <div
         aria-hidden="true"
         className="absolute -left-32 -top-36 h-96 w-96 rounded-full bg-blue-300/40 blur-3xl dark:bg-blue-900/30"

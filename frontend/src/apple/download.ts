@@ -20,6 +20,11 @@ import {
   type DownloadReply,
   type DownloadSession,
 } from "./downloadProduct";
+import {
+  appFactsFromItem,
+  recordAppFacts,
+  type AppFacts,
+} from "./appFacts";
 import i18n from "../i18n";
 
 export { DownloadError };
@@ -32,7 +37,11 @@ export async function getDownloadInfo(
     allowMissingDPInfo?: boolean;
     onStage?: DownloadStageObserver;
   } = {},
-): Promise<{ output: DownloadOutput; updatedCookies: typeof account.cookies }> {
+): Promise<{
+  output: DownloadOutput;
+  updatedCookies: typeof account.cookies;
+  appFacts?: AppFacts;
+}> {
   const session = createDownloadSession(account, app);
 
   const reply = await requestDownloadProduct(session, externalVersionId ?? "", {
@@ -86,7 +95,7 @@ async function interpretReply(
   session: DownloadSession,
   reply: DownloadReply,
   allowMissingDPInfo = false,
-): Promise<{ output: DownloadOutput; updatedCookies: Cookie[] }> {
+): Promise<{ output: DownloadOutput; updatedCookies: Cookie[]; appFacts?: AppFacts }> {
   assertDownloadReply(reply);
 
   const item = itemsOf(reply)[0];
@@ -175,6 +184,12 @@ async function interpretReply(
   const preflightPackageURL = item.preflightPackageURL;
   const md5 = md5FromField(item.md5);
 
+  // The reply also names the app itself (see `appFacts`): remember its display
+  // facts for the session so a bare record can show them.
+  const facts = appFactsFromItem(item);
+  const hasFacts = Object.keys(facts).length > 0;
+  if (hasFacts) recordAppFacts(session.app.id, facts);
+
   return {
     output: {
       downloadURL: url,
@@ -195,6 +210,7 @@ async function interpretReply(
       iTunesMetadata,
     },
     updatedCookies: session.cookies,
+    appFacts: hasFacts ? facts : undefined,
   };
 }
 

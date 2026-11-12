@@ -21,6 +21,7 @@ import {
 } from "../../src/apple/anisetteStore";
 import { clearStoreProofCache } from "../../src/apple/machineValidation";
 import i18n from "../../src/i18n";
+import { cachedAppFacts, clearCachedAppFacts } from "../../src/apple/appFacts";
 import type { Account, Software } from "../../src/types";
 
 vi.mock("../../src/apple/request", () => ({
@@ -255,6 +256,7 @@ describe("apple/download", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearStoreProofCache();
+    clearCachedAppFacts();
     vi.mocked(getAnisetteState).mockResolvedValue(undefined);
     vi.mocked(fetchStoreProof).mockReset();
     vi.mocked(handleAuthAction).mockReset();
@@ -310,6 +312,38 @@ describe("apple/download", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].host).toBe("p25-buy.itunes.apple.com");
     expect(calls[0].path).toContain("/volumeStoreDownloadProduct?guid=aabbccddeeff");
+  });
+
+  it("records display facts from a download reply that names the app", async () => {
+    downloadReplies = [
+      reply(
+        downloadDoc({
+          bundleDisplayName: "Example App",
+          artistName: "Example Seller",
+          softwareIcon57x57URL: "https://example.com/icon/57x57bb.jpg",
+          softwareVersionBundleId: "com.example.app",
+        }),
+      ),
+    ];
+
+    const result = await getDownloadInfo(account, app);
+
+    expect(result.appFacts).toEqual({
+      name: "Example App",
+      artistName: "Example Seller",
+      artworkUrl: "https://example.com/icon/512x512bb.jpg",
+      bundleID: "com.example.app",
+    });
+    expect(cachedAppFacts(app.id)).toEqual(result.appFacts);
+  });
+
+  it("records no facts when the reply names nothing", async () => {
+    downloadReplies = [reply(downloadDoc())];
+
+    const result = await getDownloadInfo(account, app);
+
+    expect(result.appFacts).toBeUndefined();
+    expect(cachedAppFacts(app.id)).toBeUndefined();
   });
 
   it("attaches the Store AMD proof and current Store headers", async () => {

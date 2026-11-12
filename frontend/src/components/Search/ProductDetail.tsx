@@ -37,6 +37,8 @@ import {
   needsFetchVerification,
   needsVersionExchange,
 } from "../../utils/software";
+import { subscribeAppFacts, withAppFacts } from "../../apple/appFacts";
+import { ensureAppFacts } from "../../apple/ensureAppFacts";
 import {
   appPresenceFromProbeError,
   isPlatformVersionUnavailable,
@@ -306,7 +308,7 @@ export default function ProductDetail() {
         if (seq !== lookupSeqRef.current) return;
         if (result) {
           lastGoodRef.current = { country, platform, email: selectedAccount };
-          setApp(result);
+          setApp(withAppFacts(result));
           setLoading(false);
           return;
         }
@@ -324,7 +326,7 @@ export default function ProductDetail() {
           // Nothing carries the app here and there is no earlier selection. A numeric
           // App ID may still be real: keep it and probe (see below).
           const bare = /^\d+$/.test(appId)
-            ? bareSoftwareById(appId, platform)
+            ? withAppFacts(bareSoftwareById(appId, platform))
             : null;
           if (bare) {
             lastGoodRef.current = { country, platform, email: selectedAccount };
@@ -421,7 +423,19 @@ export default function ProductDetail() {
     const fillOnce = (versions: string[]) => {
       if (filledListKeysRef.current.has(key)) return;
       filledListKeysRef.current.add(key);
-      fillVersionsSilently(probeAccount, app, versions);
+      void (async () => {
+        await fillVersionsSilently(probeAccount, app, versions);
+        if (!mountedRef.current) return;
+        // When every version's metadata came from the shared cache, the fill
+        // asked Apple nothing — so a record still unnamed gets one
+        // metadata-only exchange here. The helper skips records the fill
+        // already named, and records with no gaps.
+        const pin =
+          routeVersionId && versions.includes(routeVersionId)
+            ? routeVersionId
+            : (versions[0] ?? "");
+        await ensureAppFacts(probeAccount, app, pin);
+      })();
     };
     const cached = getCachedVersionList(key);
     if (cached) {
@@ -429,6 +443,9 @@ export default function ProductDetail() {
       // and no verdict from another storefront survives it.
       setProbeNote("");
       setPlatformUnavailable(false);
+      // The list came from the cache, but the session's facts may be newer
+      // than this record: fill its gaps all the same.
+      setApp((current) => (current ? withAppFacts(current) : current));
       fillOnce(cached);
       return;
     }
@@ -443,6 +460,8 @@ export default function ProductDetail() {
         if (!mountedRef.current) return;
         setProbeNote("");
         setPlatformUnavailable(false);
+        // The exchange reply may have named the app: fill the record's gaps.
+        setApp((current) => (current ? withAppFacts(current) : current));
         fillOnce(versions);
       })
       .catch((error: unknown) => {
@@ -471,6 +490,16 @@ export default function ProductDetail() {
     fillVersionsSilently,
     t,
   ]);
+
+  // Display facts can land from any exchange after the probe settled: fill the
+  // record's gaps the moment the session learns them.
+  useEffect(
+    () =>
+      subscribeAppFacts(() => {
+        setApp((current) => (current ? withAppFacts(current) : current));
+      }),
+    [],
+  );
 
   // Entering from a search that picked a region brings the matching account along,
   // re-asserting until the selection is settled so a StrictMode double-run cannot

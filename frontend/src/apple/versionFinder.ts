@@ -20,6 +20,11 @@ import {
   versionIdentifiersFromReply,
   type DownloadReply,
 } from "./downloadProduct";
+import {
+  appFactsFromItem,
+  recordAppFacts,
+  type AppFacts,
+} from "./appFacts";
 import { guessPlatformPinFromIOSList } from "./versionPinGuess";
 import {
   lookupLatestExternalVersionId,
@@ -48,6 +53,12 @@ export interface VersionListOutput {
   latestExternalVersionId?: string;
   /** Display version of `latestExternalVersionId`, when Apple names it. */
   latestDisplayVersion?: string;
+  /**
+   * Display facts the reply named about the app itself (name, icon, …) — the
+   * bare-record case, where the exchange is the only source. Also recorded in
+   * the session cache (`appFacts`) for callers whose list comes from the cache.
+   */
+  appFacts?: AppFacts;
 }
 
 /**
@@ -82,6 +93,11 @@ export async function listVersions(
   const metadata = itemsOf(reply)[0].metadata as Record<string, any> | undefined;
   const latest = metadata?.softwareVersionExternalIdentifier;
   const latestDisplayVersion = metadata?.bundleShortVersionString;
+  // The reply also names the app itself (see `appFacts`): remember its display
+  // facts for the session so a bare record can show them.
+  const facts = appFactsFromItem(itemsOf(reply)[0]);
+  const hasFacts = Object.keys(facts).length > 0;
+  if (hasFacts) recordAppFacts(app.id, facts);
 
   return {
     versions: versionIdentifiersFromReply(reply),
@@ -92,6 +108,7 @@ export async function listVersions(
       typeof latestDisplayVersion === "string" && latestDisplayVersion !== ""
         ? latestDisplayVersion
         : undefined,
+    appFacts: hasFacts ? facts : undefined,
     updatedCookies: session.cookies,
   };
 }

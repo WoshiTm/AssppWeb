@@ -5,6 +5,7 @@ import { appleRequest } from "../../src/apple/request";
 import { fetchBag } from "../../src/apple/bag";
 import { generateDownloadKBSync } from "../../src/apple/sap/client";
 import i18n from "../../src/i18n";
+import { cachedAppFacts, clearCachedAppFacts } from "../../src/apple/appFacts";
 import type { Account, Software } from "../../src/types";
 
 vi.mock("../../src/apple/request", () => ({
@@ -102,6 +103,7 @@ const downloadCalls = () => allCalls().filter((options) => options.host !== LOOK
 describe("apple/versionLookup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearCachedAppFacts();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "info").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -149,6 +151,43 @@ describe("apple/versionLookup", () => {
     );
     // An explicitly pinned request must not consult the catalogue.
     expect(allCalls().filter((c) => c.host === LOOKUP_HOST)).toHaveLength(0);
+  });
+
+  it("records display facts from a version metadata reply", async () => {
+    downloadReplies = [
+      reply(
+        metadataDoc({
+          bundleShortVersionString: "4.5.6",
+          releaseDate: "2024-03-01T08:00:00Z",
+          bundleDisplayName: "Example App",
+          softwareIcon57x57URL: "https://example.com/icon/57x57bb.jpg",
+        }),
+      ),
+    ];
+
+    const result = await getVersionMetadata(account, app, VERSION_ID);
+
+    expect(result.appFacts).toEqual({
+      name: "Example App",
+      artworkUrl: "https://example.com/icon/512x512bb.jpg",
+    });
+    expect(cachedAppFacts(app.id)).toEqual(result.appFacts);
+  });
+
+  it("records no facts when the reply names nothing", async () => {
+    downloadReplies = [
+      reply(
+        metadataDoc({
+          bundleShortVersionString: "4.5.6",
+          releaseDate: "2024-03-01T08:00:00Z",
+        }),
+      ),
+    ];
+
+    const result = await getVersionMetadata(account, app, VERSION_ID);
+
+    expect(result.appFacts).toBeUndefined();
+    expect(cachedAppFacts(app.id)).toBeUndefined();
   });
 
   it("prefers the StoreAgent ent/download endpoint for version metadata", async () => {
@@ -254,5 +293,54 @@ describe("apple/versionLookup", () => {
     await expect(getVersionMetadata(account, app, VERSION_ID)).rejects.toThrow(
       i18n.t("errors.versions.missingMetadata"),
     );
+  });
+
+  it("records display facts even when the reply carries no release date", async () => {
+    downloadReplies = [
+      reply(
+        metadataDoc({
+          bundleShortVersionString: "4.5.6",
+          bundleDisplayName: "Example App",
+          softwareIcon57x57URL: "https://example.com/icon/57x57bb.jpg",
+        }),
+      ),
+    ];
+
+    await expect(getVersionMetadata(account, app, VERSION_ID)).rejects.toThrow(
+      i18n.t("errors.versions.missingMetadata"),
+    );
+    expect(cachedAppFacts(app.id)).toEqual({
+      name: "Example App",
+      artworkUrl: "https://example.com/icon/512x512bb.jpg",
+    });
+  });
+
+  it("records display facts even when the reply carries no display version", async () => {
+    downloadReplies = [
+      reply(
+        metadataDoc({
+          releaseDate: "2024-03-01T08:00:00Z",
+          bundleDisplayName: "Example App",
+          softwareIcon57x57URL: "https://example.com/icon/57x57bb.jpg",
+        }),
+      ),
+    ];
+
+    await expect(getVersionMetadata(account, app, VERSION_ID)).rejects.toThrow(
+      i18n.t("errors.versions.missingMetadata"),
+    );
+    expect(cachedAppFacts(app.id)).toEqual({
+      name: "Example App",
+      artworkUrl: "https://example.com/icon/512x512bb.jpg",
+    });
+  });
+
+  it("records no facts when the reply is a failure", async () => {
+    downloadReplies = [reply(failureDoc("9610"))];
+
+    await expect(getVersionMetadata(account, app, VERSION_ID)).rejects.toThrow(
+      i18n.t("errors.versions.licenseRequired"),
+    );
+    expect(cachedAppFacts(app.id)).toBeUndefined();
   });
 });

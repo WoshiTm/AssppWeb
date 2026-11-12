@@ -105,7 +105,7 @@ function restoreProperty(
 
 describe('PackageQuickActions', () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     useToastStore.setState({ toasts: [] });
     vi.mocked(detectInstallDevice).mockReturnValue({
       family: 'iphone',
@@ -218,7 +218,7 @@ describe('PackageQuickActions', () => {
       ok: true,
       json: () => Promise.resolve({ url: downloadUrl }),
     } as Response);
-    sessionStorage.setItem('auth-token', 'test-access-token');
+    localStorage.setItem('auth-token', 'test-access-token');
 
     render(<PackageQuickActions task={createTask()} />);
 
@@ -248,7 +248,7 @@ describe('PackageQuickActions', () => {
       ok: true,
       json: () => Promise.resolve({ url: downloadUrl }),
     } as Response);
-    sessionStorage.setItem('auth-token', 'test-access-token');
+    localStorage.setItem('auth-token', 'test-access-token');
 
     const base = createTask();
     render(
@@ -284,7 +284,7 @@ describe('PackageQuickActions', () => {
           Promise.resolve({ url: callCount === 1 ? expiredUrl : freshUrl }),
       } as Response);
     });
-    sessionStorage.setItem('auth-token', 'test-access-token');
+    localStorage.setItem('auth-token', 'test-access-token');
 
     render(<PackageQuickActions task={createTask()} />);
 
@@ -335,7 +335,7 @@ describe('PackageQuickActions', () => {
             } as Response),
       );
     });
-    sessionStorage.setItem('auth-token', 'test-access-token');
+    localStorage.setItem('auth-token', 'test-access-token');
 
     render(<PackageQuickActions task={createTask()} />);
 
@@ -371,7 +371,7 @@ describe('PackageQuickActions', () => {
       ok: true,
       json: () => Promise.resolve({ url: downloadUrl }),
     } as Response);
-    sessionStorage.setItem('auth-token', 'test-access-token');
+    localStorage.setItem('auth-token', 'test-access-token');
 
     render(<PackageQuickActions task={createTask()} />);
     fireEvent.click(
@@ -405,7 +405,7 @@ describe('PackageQuickActions', () => {
       ok: false,
       text: () => Promise.resolve('nope'),
     } as Response);
-    sessionStorage.setItem('auth-token', 'test-access-token');
+    localStorage.setItem('auth-token', 'test-access-token');
 
     render(<PackageQuickActions task={createTask()} />);
     await user.click(

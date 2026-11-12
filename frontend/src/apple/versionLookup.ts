@@ -14,6 +14,11 @@ import {
   requestDownloadProduct,
   type DownloadReply,
 } from "./downloadProduct";
+import {
+  appFactsFromItem,
+  recordAppFacts,
+  type AppFacts,
+} from "./appFacts";
 import i18n from "../i18n";
 
 /** Reads the display version and release date of one version, mirroring ipatool's `GetVersionMetadata`:
@@ -30,6 +35,7 @@ export async function getVersionMetadata(
 ): Promise<{
   metadata: VersionMetadata;
   updatedCookies: typeof account.cookies;
+  appFacts?: AppFacts;
 }> {
   const session = createDownloadSession(account, app);
 
@@ -37,9 +43,18 @@ export async function getVersionMetadata(
 
   assertVersionMetadataReply(reply);
 
-  const itemMetadata = itemsOf(reply)[0].metadata as
-    | Record<string, any>
-    | undefined;
+  const item = itemsOf(reply)[0];
+
+  // The reply also names the app itself (see `appFacts`): remember its display
+  // facts for the session so a bare record can show them. This runs before the
+  // metadata checks below: the facts need neither a display version nor a
+  // release date, and a reply without them must not take the name and icon
+  // down with it.
+  const facts = appFactsFromItem(item);
+  const hasFacts = Object.keys(facts).length > 0;
+  if (hasFacts) recordAppFacts(app.id, facts);
+
+  const itemMetadata = item.metadata as Record<string, any> | undefined;
   if (!itemMetadata) {
     throw new DownloadError(i18n.t("errors.versions.missingMetadata"));
   }
@@ -62,6 +77,7 @@ export async function getVersionMetadata(
   return {
     metadata: { displayVersion, releaseDate },
     updatedCookies: session.cookies,
+    appFacts: hasFacts ? facts : undefined,
   };
 }
 

@@ -9,6 +9,10 @@ import {
   PlatformVersionUnavailableError,
 } from '../../src/apple/errors';
 import { getVersionMetadata } from '../../src/apple/versionLookup';
+import {
+  clearCachedAppFacts,
+  recordAppFacts,
+} from '../../src/apple/appFacts';
 import { lookupAppById, searchApps } from '../../src/api/search';
 import { useSearch } from '../../src/hooks/useSearch';
 import { useToastStore } from '../../src/store/toast';
@@ -954,5 +958,136 @@ describe('SearchPage App ID probe', () => {
       expect(screen.getByText('search.bareChecking')).toBeTruthy(),
     );
     expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('SearchPage facts subscription', () => {
+  // A different id from the probe suite above: its last test leaves a version
+  // exchange unsettled, and the in-flight slot is keyed by id:platform:region.
+  const bareId = bareSoftwareById('6503940940', 'ios');
+
+  beforeEach(() => {
+    clearCachedAppFacts();
+    mocks.accounts = [account];
+    mocks.accountsLoading = false;
+    mocks.listVersions.mockReset();
+    mocks.listVersions.mockResolvedValue({
+      versions: ['883003118'],
+      updatedCookies: [],
+    });
+    mocks.fetchVersionMetadata.mockReset();
+    mocks.fetchVersionMetadata.mockResolvedValue({});
+    vi.mocked(searchApps).mockReset();
+    vi.mocked(searchApps).mockResolvedValue([]);
+    vi.mocked(lookupAppById).mockReset();
+    vi.mocked(lookupAppById).mockResolvedValue(null);
+    vi.mocked(getVersionMetadata).mockReset();
+    vi.mocked(getVersionMetadata).mockResolvedValue({
+      metadata: { displayVersion: '9.9.9', releaseDate: '2026-01-01T00:00:00Z' },
+      updatedCookies: [],
+    } as never);
+    useVersionListsStore.setState({ lists: {} });
+    useVersionMetadataStore.setState({
+      entries: {},
+      pending: {},
+      attempted: {},
+    });
+    useToastStore.setState({ toasts: [] });
+    useSearch.setState({
+      term: bareId.name,
+      country: 'US',
+      platform: 'ios',
+      results: [bareId],
+      loading: false,
+      error: null,
+      searched: true,
+    });
+  });
+
+  it('refreshes the card the moment a late exchange names the app', async () => {
+    const { container } = renderSearchPage();
+
+    // The probe settles with no facts: the card still reads as the bare id.
+    await waitFor(() => expect(screen.getByRole('link')).toBeTruthy());
+    expect(container.querySelector('img')).toBeNull();
+
+    // A later exchange (the version-detail fill's pinned lookup) names the app.
+    await act(async () => {
+      recordAppFacts(6503940940, {
+        name: '小推',
+        artistName: 'Example Studio',
+        artworkUrl: 'https://example.com/icon.png',
+      });
+    });
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('img[src="https://example.com/icon.png"]'),
+      ).not.toBeNull(),
+    );
+    expect(screen.getAllByText('小推').length).toBeGreaterThan(0);
+  });
+
+  it('names a record whose versions all came from the shared cache', async () => {
+    // The shared cache already vouches for the only version, so the silent
+    // fill has nothing to ask: without a facts exchange of its own, no
+    // exchange would ever name this record.
+    const record = bareSoftwareById('6503940941', 'ios');
+    useVersionMetadataStore.setState({
+      entries: {
+        '883341013': {
+          displayVersion: '1.1.6',
+          releaseDate: '2026-03-13T08:44:16.000Z',
+          minimumOsVersion: '13.0',
+          supportedPlatforms: ['iPhoneOS'],
+          source: 'package-read',
+        },
+      },
+    });
+    mocks.listVersions.mockResolvedValue({
+      versions: ['883341013'],
+      updatedCookies: [],
+    });
+    vi.mocked(getVersionMetadata).mockImplementation(
+      async (_account, app) => {
+        recordAppFacts(app.id, {
+          name: '小推',
+          artworkUrl: 'https://example.com/icon.png',
+          artistName: 'Example Studio',
+          bundleID: 'com.example.xiaotui',
+        });
+        return {
+          metadata: {
+            displayVersion: '1.1.6',
+            releaseDate: '2026-03-13T08:44:16.000Z',
+          },
+          updatedCookies: [],
+        } as never;
+      },
+    );
+    useSearch.setState({
+      term: record.name,
+      country: 'US',
+      platform: 'ios',
+      results: [record],
+      loading: false,
+      error: null,
+      searched: true,
+    });
+
+    const { container } = renderSearchPage();
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('img[src="https://example.com/icon.png"]'),
+      ).not.toBeNull(),
+    );
+    expect(screen.getAllByText('小推').length).toBeGreaterThan(0);
+    expect(vi.mocked(getVersionMetadata)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(getVersionMetadata)).toHaveBeenCalledWith(
+      account,
+      expect.objectContaining({ id: 6503940941 }),
+      '883341013',
+    );
   });
 });

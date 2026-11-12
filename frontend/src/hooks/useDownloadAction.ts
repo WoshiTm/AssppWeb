@@ -23,6 +23,7 @@ import {
 import { needsPlatformPin } from "../apple/platform";
 import { repeatUnreachable } from "../apple/retry";
 import { listVersions } from "../apple/versionFinder";
+import { fetchThirdPartyVersionList } from "../apple/thirdPartyVersions";
 import { getVersionMetadata } from "../apple/versionLookup";
 import { getCachedVersionList, versionListKey } from "../store/versionLists";
 import { useVersionMetadataStore } from "../store/versionMetadata";
@@ -60,6 +61,23 @@ function isSessionFailure(
     error instanceof DownloadError &&
     error.code !== undefined &&
     failureTypes.has(error.code)
+  );
+}
+
+/**
+ * Whether a failed version exchange may fall back to the third-party history:
+ * only an answer from Apple itself (a missing app, an unnameable platform, or
+ * a failure-type reply — the codeless errors and the coded ones that are
+ * neither session nor license failures). A session failure, a missing
+ * license, or a transport failure says nothing about the app and must never
+ * be masked by third-party data.
+ */
+function isThirdPartyFallbackEligible(error: unknown): boolean {
+  if (!(error instanceof DownloadError)) return false;
+  if (error.code === undefined) return true;
+  return (
+    !VERSION_SESSION_FAILURE_TYPES.has(error.code) &&
+    error.code !== FAILURE_LICENSE_NOT_FOUND
   );
 }
 
@@ -382,45 +400,86 @@ export function useDownloadAction() {
       onStage?: DownloadStageObserver,
     ): Promise<Awaited<ReturnType<typeof listVersions>>> => {
       let currentAccount = account;
-      let result: Awaited<ReturnType<typeof listVersions>>;
+      /** True once the license step ran: its failures are never papered over. */
+      let licenseAttempted = false;
       const requestVersions = (sessionAccount: Account) => {
         // Keep the renewed account even if this attempt fails: the license step
         // below must not fall back to the session that just expired.
         currentAccount = sessionAccount;
         return listVersions(sessionAccount, app, pinnedVersionId, onStage);
       };
+      const fetchFromApple = async () => {
+        try {
+          const attempt = await retryWithRenewedSession(
+            currentAccount,
+            requestVersions,
+            VERSION_SESSION_FAILURE_TYPES,
+          );
+          currentAccount = attempt.account;
+          return attempt.result;
+        } catch (err) {
+          if (
+            !(err instanceof DownloadError) ||
+            err.code !== FAILURE_LICENSE_NOT_FOUND ||
+            !useSettingsStore.getState().autoAcquireLicense
+          ) {
+            throw err;
+          }
+
+          licenseAttempted = true;
+          const ctx = getAccountContext(account, t);
+          currentAccount = await acquireLicenseFor(currentAccount, app);
+          addToast(
+            t("toast.msg", { appName: app.name, ...ctx }),
+            "success",
+            t("toast.title.licenseSuccess"),
+          );
+
+          const attempt = await retryWithRenewedSession(
+            currentAccount,
+            requestVersions,
+            VERSION_SESSION_FAILURE_TYPES,
+          );
+          currentAccount = attempt.account;
+          return attempt.result;
+        }
+      };
+
+      let result: Awaited<ReturnType<typeof listVersions>>;
       try {
-        const attempt = await retryWithRenewedSession(
-          currentAccount,
-          requestVersions,
-          VERSION_SESSION_FAILURE_TYPES,
-        );
-        result = attempt.result;
-        currentAccount = attempt.account;
+        result = await fetchFromApple();
       } catch (err) {
+        // Apple's exchange named nothing. For an iOS/iPad app the third-party
+        // history may still know its versions — a delisted app the account
+        // owns can be downloaded by id even though no catalogue lists it.
+        // Other platforms keep their current answer: the history does not say
+        // which platform a build belongs to, and a wrong-platform pin is worse
+        // than none.
         if (
-          !(err instanceof DownloadError) ||
-          err.code !== FAILURE_LICENSE_NOT_FOUND ||
-          !useSettingsStore.getState().autoAcquireLicense
+          licenseAttempted ||
+          (app.platform !== "ios" && app.platform !== "ipad") ||
+          !isThirdPartyFallbackEligible(err)
         ) {
           throw err;
         }
-
-        const ctx = getAccountContext(account, t);
-        currentAccount = await acquireLicenseFor(currentAccount, app);
-        addToast(
-          t("toast.msg", { appName: app.name, ...ctx }),
-          "success",
-          t("toast.title.licenseSuccess"),
+        const fallback = await fetchThirdPartyVersionList(app.id);
+        if (fallback.versions.length === 0) throw err;
+        console.info(
+          `[versions] third-party history supplied ${fallback.versions.length} versions for ${app.id}`,
         );
-
-        const attempt = await retryWithRenewedSession(
-          currentAccount,
-          requestVersions,
-          VERSION_SESSION_FAILURE_TYPES,
-        );
-        result = attempt.result;
-        currentAccount = attempt.account;
+        for (const entry of fallback.entries) {
+          useVersionMetadataStore.getState().putEntry(entry.versionId, {
+            displayVersion: entry.displayVersion,
+            releaseDate: entry.releaseDate,
+            source: "client",
+          });
+        }
+        result = {
+          versions: fallback.versions,
+          latestExternalVersionId: fallback.versions[0],
+          latestDisplayVersion: fallback.latestDisplayVersion,
+          updatedCookies: currentAccount.cookies,
+        };
       }
 
       await updateAccount({ ...currentAccount, cookies: result.updatedCookies });

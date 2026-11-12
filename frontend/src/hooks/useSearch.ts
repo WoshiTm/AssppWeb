@@ -4,6 +4,7 @@ import { searchApps, lookupApp, lookupAppById } from "../api/search";
 import { looksLikeBundleId } from "../utils/bundleId";
 import { appIdFromStoreUrl } from "../utils/appStoreUrl";
 import { bareSoftwareById } from "../utils/software";
+import { withAppFacts } from "../apple/appFacts";
 import type { Platform, Software } from "../types";
 
 interface SearchState {
@@ -31,6 +32,12 @@ interface SearchState {
    * still behind it to fetch.
    */
   dropResult: (id: number) => void;
+  /**
+   * Fills a result's gaps from the session's exchange facts (see `appFacts`) —
+   * a bare App ID the version exchange just named shows its name and icon.
+   * A no-op when the record is unknown or already complete.
+   */
+  enrichResult: (id: number) => void;
   /** Clears term, results and error, keeping country/platform as preferences. */
   clear: () => void;
 }
@@ -68,7 +75,9 @@ export const useSearch = create<SearchState>()(
             // record the version exchange can still fetch directly, and its answer
             // decides whether the record survives (see the search page's probe).
             const app = await lookupAppById(storeId, country, platform);
-            next = app ? [app] : [bareSoftwareById(storeId, platform)];
+            // A record the session's exchanges already named keeps its name
+            // and icon across searches, without waiting for another probe.
+            next = [withAppFacts(app ?? bareSoftwareById(storeId, platform))];
           } else if (looksLikeBundleId(term)) {
             const app = await lookupApp(term.trim(), country, platform);
             next = app ? [app] : [];
@@ -109,6 +118,16 @@ export const useSearch = create<SearchState>()(
         set((state) => {
           const results = state.results.filter((app) => app.id !== id);
           return results.length === state.results.length ? state : { results };
+        }),
+      enrichResult: (id) =>
+        set((state) => {
+          const index = state.results.findIndex((app) => app.id === id);
+          if (index === -1) return state;
+          const enriched = withAppFacts(state.results[index]);
+          if (enriched === state.results[index]) return state;
+          const results = [...state.results];
+          results[index] = enriched;
+          return { results };
         }),
     }),
     {

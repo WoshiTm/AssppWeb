@@ -32,7 +32,8 @@ describe('Downloads tab badge', () => {
   it('shows no badge while nothing is downloading (mobile)', () => {
     renderInRouter(<MobileNav />);
 
-    expect(downloadsLink().textContent).toBe('nav.downloads');
+    expect(downloadsLink()).toBeTruthy();
+    expect(screen.queryByTestId('downloads-tab-badge')).toBeNull();
   });
 
   it('shows the active download count on the mobile tab', () => {
@@ -41,7 +42,7 @@ describe('Downloads tab badge', () => {
     });
     renderInRouter(<MobileNav />);
 
-    expect(downloadsLink().textContent).toContain('2');
+    expect(screen.getByTestId('downloads-tab-badge').textContent).toBe('2');
   });
 
   it('shows no badge while nothing is downloading (sidebar)', () => {

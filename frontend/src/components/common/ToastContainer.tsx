@@ -89,7 +89,7 @@ export default function ToastContainer() {
       </style>
 
       <div
-        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+4.625rem)] left-4 right-4 top-[calc(env(safe-area-inset-top)+4rem)] z-[100] flex flex-col items-end gap-3 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:none] md:bottom-4 md:left-auto md:top-4 [&::-webkit-scrollbar]:hidden"
+        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] left-4 right-4 top-[calc(env(safe-area-inset-top)+4rem)] z-[100] flex flex-col items-end gap-3 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:none] md:bottom-4 md:left-auto md:top-4 [&::-webkit-scrollbar]:hidden"
         role="region"
         aria-label="Notifications"
       >

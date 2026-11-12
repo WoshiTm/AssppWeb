@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isPlaceholderAppName } from '../../utils/software';
 
 interface AppIconProps {
@@ -18,6 +18,13 @@ const surfaceClassName =
 
 export default function AppIcon({ url, name, size = 'md' }: AppIconProps) {
   const [failed, setFailed] = useState(false);
+
+  // A failed load must not stick: the URL can arrive late (a bare record
+  // named by an exchange) or be replaced, and a new URL deserves its own
+  // attempt. Without this, one error hides every later icon for the card.
+  useEffect(() => {
+    setFailed(false);
+  }, [url]);
 
   if (!url || failed) {
     return (
